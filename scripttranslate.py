@@ -11,7 +11,7 @@ import argostranslate.translate
 PRODUCTS_FILE = 'products.csv'
 ORDERS_FILE = 'manual_orders.csv'
 OUTPUT_FOLDER = 'purchase_orders'
-FUZZY_MATCH_THRESHOLD = 70
+FUZZY_MATCH_THRESHOLD = 70  
 
 # --- Setup ---
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -66,7 +66,7 @@ def match_product(order_name, product_names):
         scorer=fuzz.token_set_ratio
     )
 
-    print(f"Matching '{order_name}' → '{match}' (score: {score})")
+    print(f"Matching '{order_name}' → '{match}' with score {score}")
 
     if score >= FUZZY_MATCH_THRESHOLD:
         return product_names[normalized_products == match].values[0]
@@ -83,7 +83,7 @@ with open(ORDERS_FILE, 'r', encoding='utf-8-sig') as f:
 order_number = lines[0].strip().split(',')[1]
 delivery_date = lines[1].strip().split(',')[1]
 
-# Load the product list starting at row 4
+# Load the orders table (skip first 4 lines)
 orders_df = pd.read_csv(ORDERS_FILE, skiprows=4)
 
 # Clean column names
@@ -94,7 +94,9 @@ orders_df.columns = orders_df.columns.str.strip()
 products_df.rename(columns={
     'ID': 'ProductID',
     'Nom': 'ProductName',
-    'Fournisseurs': 'Supplier'
+    'Fournisseurs': 'Supplier',
+    'Catégorie de produits/Nom': 'Category',
+    'Prix de vente': 'Unit Price'
 }, inplace=True)
 
 # --- Match Orders ---
@@ -103,8 +105,7 @@ matched_rows = []
 for idx, order_row in orders_df.iterrows():
     raw_name = order_row['Name']
     quantity = order_row['Quantity']
-    raw_comment = order_row.get('Comments', '')
-    comment = translate_comment(raw_comment)
+    comment = translate_comment(order_row.get('Comments', ''))
 
     matched_name = match_product(raw_name, products_df['ProductName'])
 
@@ -115,6 +116,8 @@ for idx, order_row in orders_df.iterrows():
             'ProductName': matched_product['ProductName'],
             'Quantity': quantity,
             'Supplier': matched_product['Supplier'],
+            'Category': matched_product.get('Category', ''),
+            'Unit Price': matched_product.get('Unit Price', 0.0),
             'Comments': comment
         })
         print(f"[✅] Matched: '{raw_name}' → '{matched_name}'")
@@ -129,12 +132,12 @@ if final_df.empty:
 else:
     today_str = datetime.today().strftime('%d/%m/%Y')
 
+    # Create individual supplier POs
     for supplier, group in final_df.groupby('Supplier'):
         safe_supplier = supplier.replace(' ', '_').replace('/', '_')
         filename = f"PO_{order_number}_{safe_supplier}.csv"
         output_path = os.path.join(OUTPUT_FOLDER, filename)
 
-        # Write header info
         header_rows = [
             ['Client:', 'Froggy Gourmet'],
             ['Order Number:', order_number],
@@ -145,7 +148,6 @@ else:
             []
         ]
 
-        # Remove Supplier from table
         product_table = group[['ProductID', 'ProductName', 'Quantity', 'Comments']]
 
         with open(output_path, 'w', encoding='utf-8-sig', newline='') as f:
@@ -154,3 +156,30 @@ else:
             product_table.to_csv(f, index=False)
 
         print(f"[📦] Written: {output_path}")
+
+    # Create Quote CSV
+    quote_df = final_df[['ProductID', 'ProductName', 'Category', 'Quantity', 'Unit Price']].copy()
+
+    quote_df['Quantity'] = pd.to_numeric(quote_df['Quantity'], errors='coerce')
+    quote_df['Unit Price'] = pd.to_numeric(quote_df['Unit Price'], errors='coerce')
+
+    quote_df['Total Price'] = quote_df['Quantity'] * quote_df['Unit Price']
+    quote_df[['Unit Price', 'Total Price']] = quote_df[['Unit Price', 'Total Price']].round(2)
+
+    grand_total = quote_df['Total Price'].sum().round(2)
+
+    total_row = pd.DataFrame([{
+        'ProductID': '',
+        'ProductName': 'TOTAL (€)',
+        'Category': '',
+        'Quantity': '',
+        'Unit Price': '',
+        'Total Price': grand_total
+    }])
+
+    quote_df = pd.concat([quote_df, total_row], ignore_index=True)
+
+    quote_output_path = os.path.join(OUTPUT_FOLDER, f"Quote_{order_number}.csv")
+    quote_df.to_csv(quote_output_path, index=False)
+
+    print(f"[📄] Quote CSV created: {quote_output_path}")

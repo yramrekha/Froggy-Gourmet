@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manual Orders Matching</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 30px; }
+        .container { background: white; padding: 20px; border-radius: 10px; width: 400px; margin: auto; text-align: center; }
+        input[type=file] { margin: 20px 0; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .flash { color: green; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Upload Manual Orders CSV</h2>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".csv">
+            <br>
+            <button type="submit">Run Matching</button>
+        </form>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash">
+              {% for message in messages %}
+                <p>{{ message }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+    </div>
+</body>
+</html>
