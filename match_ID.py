@@ -121,8 +121,8 @@ else:
         'ProductName': 'TOTAL (€)',
         'Category': '',
         'Quantity': '',
-        'Unit Price': '',
-        'Total Price': grand_total
+        'Unit Price (€)': '',
+        'Total Price (€)': grand_total
     }])
 
     quote_df = pd.concat([quote_df, total_row], ignore_index=True)
